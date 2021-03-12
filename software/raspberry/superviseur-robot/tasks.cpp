@@ -446,7 +446,8 @@ void Tasks::MoveTask(void *arg) {
 
 void Tasks::CameraTask(void *arg) {
     int ac, status;
-    Message *msgSend, *msgImg;
+    Message *msgSend;
+    MessageImg *msgImg;
     Camera cam(sm, 10);
     cout << "Start " << __PRETTY_FUNCTION__ << endl << flush;
     // Synchronization barrier (waiting that all tasks are starting)
@@ -485,13 +486,16 @@ void Tasks::CameraTask(void *arg) {
         else if (!ac && camera_active) {
             cout << "Closing Camera.... " << endl << flush;
             cam.Close();
+            camera_active = false;
             msgSend = new Message(MESSAGE_ANSWER_ACK);
             WriteInQueue(&q_messageToMon, msgSend);
         }
 
         // check if camera is active -> send image
         if (camera_active) {
-            // TODO send image
+            Img i = cam.Grab();
+            msgImg = new MessageImg(MESSAGE_CAM_IMAGE, &i);
+            WriteInQueue(&q_messageToMon, msgImg);
         }
     }
 }
