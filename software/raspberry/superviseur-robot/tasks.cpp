@@ -270,6 +270,29 @@ void Tasks::ReceiveFromMonTask(void *arg) {
 
         if (msgRcv->CompareID(MESSAGE_MONITOR_LOST)) {
             delete(msgRcv);
+            cout << "Connection to Monitor lost, stopping robot and returning to initial state" << endl << flush;
+
+            // tell move robot thread to send a stop message to the robot
+            rt_mutex_acquire(&mutex_move, TM_INFINITE);
+            move = MESSAGE_ROBOT_STOP;
+            rt_mutex_release(&mutex_move);
+            rt_mutex_acquire(&mutex_new_move, TM_INFINITE);
+            new_move = true;
+            rt_mutex_release(&mutex_new_move);
+
+            // wait until it has been sent
+            while(1)
+            {
+                rt_mutex_acquire(&mutex_new_move, TM_INFINITE);
+                if(!new_move)
+                    break;
+                rt_mutex_release(&mutex_new_move);
+                rt_task_sleep(10000000); // sleep 10ms
+            }
+            // TODO later...
+            // stop communication with robot
+            // close server
+            // stop camera
             exit(-1);
         } else if (msgRcv->CompareID(MESSAGE_ROBOT_COM_OPEN)) {
             rt_sem_v(&sem_openComRobot);
@@ -387,6 +410,11 @@ void Tasks::MoveTask(void *arg) {
             rt_mutex_acquire(&mutex_robot, TM_INFINITE);
             robot.Write(new Message((MessageID)cpMove));
             rt_mutex_release(&mutex_robot);
+
+            // reset new move since move has been sent to robot
+            rt_mutex_acquire(&mutex_new_move, TM_INFINITE);
+            new_move = false;
+            rt_mutex_release(&mutex_new_move);
         }
         cout << endl << flush;
     }
