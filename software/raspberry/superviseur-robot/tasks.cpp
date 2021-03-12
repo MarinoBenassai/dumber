@@ -449,6 +449,7 @@ void Tasks::CameraTask(void *arg) {
     Message *msgSend;
     MessageImg *msgImg;
     Camera cam(sm, 10);
+    Img *i;
     cout << "Start " << __PRETTY_FUNCTION__ << endl << flush;
     // Synchronization barrier (waiting that all tasks are starting)
     rt_sem_p(&sem_barrier, TM_INFINITE);
@@ -493,8 +494,10 @@ void Tasks::CameraTask(void *arg) {
 
         // check if camera is active -> send image
         if (camera_active) {
-            Img i = cam.Grab();
-            msgImg = new MessageImg(MESSAGE_CAM_IMAGE, &i);
+            i = new Img(cam.Grab());
+            msgImg = new MessageImg();
+            msgImg->SetImage(i);
+            msgImg->SetID(MESSAGE_CAM_IMAGE);
             WriteInQueue(&q_messageToMon, msgImg);
         }
     }
