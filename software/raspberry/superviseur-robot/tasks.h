@@ -66,6 +66,8 @@ private:
     ComRobot robot;
     int robotStarted = 0;
     int move = MESSAGE_ROBOT_STOP;
+    bool camera_active = false;
+    bool activate_camera = false;
     bool new_move;
     bool watchdog = false;
     
@@ -78,6 +80,7 @@ private:
     RT_TASK th_openComRobot;
     RT_TASK th_startRobot;
     RT_TASK th_move;
+    RT_TASK th_camera;
     RT_TASK th_battery;
     
     /**********************************************************************/
@@ -87,6 +90,7 @@ private:
     RT_MUTEX mutex_robot;
     RT_MUTEX mutex_robotStarted;
     RT_MUTEX mutex_move;
+    RT_MUTEX mutex_activate_camera;
     RT_MUTEX mutex_new_move;
     RT_MUTEX mutex_watchdog;
     /**********************************************************************/
@@ -135,6 +139,11 @@ private:
      * @brief Thread handling control of the robot.
      */
     void MoveTask(void *arg);
+    
+     /**
+     * @brief Thread handling opening and closing of camer aconnection and sending of images
+     */
+    void CameraTask(void *arg);
     
     /**
      * @brief Thread checking battery level.
