@@ -66,8 +66,8 @@ private:
     ComRobot robot;
     int robotStarted = 0;
     int move = MESSAGE_ROBOT_STOP;
-    bool camera_active;
-    bool activate_camera;
+    bool camera_active = false;
+    bool activate_camera = false;
     bool new_move;
     
     /**********************************************************************/
