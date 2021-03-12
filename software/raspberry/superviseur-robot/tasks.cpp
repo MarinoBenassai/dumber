@@ -322,6 +322,15 @@ void Tasks::ReceiveFromMonTask(void *arg) {
             rt_mutex_acquire(&mutex_move, TM_INFINITE);
             move = msgRcv->GetID();
             rt_mutex_release(&mutex_move);
+        } else if (msgRcv->CompareID(MESSAGE_CAM_OPEN)) {
+            rt_mutex_acquire(&mutex_activate_camera, TM_INFINITE);
+            activate_camera = true;
+            rt_mutex_release(&mutex_activate_camera);
+        } else if (msgRcv->CompareID(MESSAGE_CAM_CLOSE)) {
+            rt_mutex_acquire(&mutex_activate_camera, TM_INFINITE);
+            activate_camera = false;
+            rt_mutex_release(&mutex_activate_camera);
+        
         }
         delete(msgRcv); // mus be deleted manually, no consumer
     }
@@ -437,7 +446,7 @@ void Tasks::MoveTask(void *arg) {
 
 void Tasks::CameraTask(void *arg) {
     int ac, status;
-    Message msgSend, msgImg;
+    Message *msgSend, *msgImg;
     Camera cam(sm, 10);
     cout << "Start " << __PRETTY_FUNCTION__ << endl << flush;
     // Synchronization barrier (waiting that all tasks are starting)
