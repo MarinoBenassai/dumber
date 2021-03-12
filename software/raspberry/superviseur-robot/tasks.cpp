@@ -590,20 +590,31 @@ void Tasks::WatchdogUpdateTask(void *arg) {
     /**************************************************************************************/
     /* The task BatteryLevelTask starts here                                                  */
     /**************************************************************************************/
-
-    rt_sem_p(&sem_wd_active, TM_INFINITE);
+    
     rt_task_set_periodic(NULL, TM_NOW, PERIOD_1000MS);
+    while (1) {
+        cout << "Wait for Watchdog semaphore " << endl << flush;
+        rt_sem_p(&sem_wd_active, TM_INFINITE);
 
+        cout << "Watchdog semaphore received" << endl << flush;
 
-    while (rs){
-        Message * m = robot.Write(new Message(MESSAGE_ROBOT_RELOAD_WD));
-        cout << "WD STATUS: " << m->ToString() << endl << flush;
-
-        rt_task_wait_period(NULL);
 
         rt_mutex_acquire(&mutex_robotStarted, TM_INFINITE);
         rs = robotStarted;
         rt_mutex_release(&mutex_robotStarted);
+        cout << "Status of robot started" << rs << endl << flush;
+
+
+        while (rs){
+            Message * m = robot.Write(new Message(MESSAGE_ROBOT_RELOAD_WD));
+            cout << "WD STATUS: " << m->ToString() << endl << flush;
+
+            rt_task_wait_period(NULL);
+
+            rt_mutex_acquire(&mutex_robotStarted, TM_INFINITE);
+            rs = robotStarted;
+            rt_mutex_release(&mutex_robotStarted);
+        }
     }
 }
 
