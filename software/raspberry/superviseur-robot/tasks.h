@@ -100,6 +100,7 @@ private:
     RT_SEM sem_openComRobot;
     RT_SEM sem_serverOk;
     RT_SEM sem_startRobot;
+    RT_SEM sem_wd_active;
 
     /**********************************************************************/
     /* Message queues                                                     */
@@ -149,6 +150,12 @@ private:
      * @brief Thread checking battery level.
      */
     void BatteryLevelTask(void *arg);
+    
+    
+    /**
+     * @brief Thread for updating the watchdog of the robot.
+     */
+    void WatchdogUpdateTask(void *arg);
     
     /**********************************************************************/
     /* Queue services                                                     */

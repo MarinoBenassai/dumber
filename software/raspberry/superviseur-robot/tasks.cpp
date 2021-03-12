@@ -28,6 +28,7 @@
 #define PRIORITY_TCAMERA 21
 #define PRIORITY_TBATTERY 30
 
+#define PERIOD_1000MS 1000 * 1000 * 1000
 #define PERIOD_100MS 1000 * 1000 * 100
 #define PERIOD_10MS 1000 * 1000 * 10
 
@@ -99,6 +100,10 @@ void Tasks::Init() {
         exit(EXIT_FAILURE);
     }
     if (err = rt_sem_create(&sem_startRobot, NULL, 0, S_FIFO)) {
+        cerr << "Error semaphore create: " << strerror(-err) << endl << flush;
+        exit(EXIT_FAILURE);
+    }
+    if (err = rt_sem_create(&sem_wd_active, NULL, 0, S_FIFO)) {
         cerr << "Error semaphore create: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
     }
@@ -414,6 +419,7 @@ void Tasks::StartRobotTask(void *arg) {
                 rt_mutex_release(&mutex_robotStarted);
                 
             }
+            rt_sem_broadcast(&sem_wd_active);
         }
         else{
             cout << "Start robot without watchdog (";
@@ -571,6 +577,33 @@ void Tasks::BatteryLevelTask(void *arg) {
 
             }
         }
+    }
+}
+
+void Tasks::WatchdogUpdateTask(void *arg) {
+    int rs;
+
+    cout << "Start " << __PRETTY_FUNCTION__ << endl << flush;
+    // Synchronization barrier (waiting that all tasks are starting)
+    rt_sem_p(&sem_barrier, TM_INFINITE);
+
+    /**************************************************************************************/
+    /* The task BatteryLevelTask starts here                                                  */
+    /**************************************************************************************/
+
+    rt_sem_p(&sem_wd_active, TM_INFINITE);
+    rt_task_set_periodic(NULL, TM_NOW, PERIOD_1000MS);
+
+
+    while (rs){
+        Message * m = robot.Write(new Message(MESSAGE_ROBOT_RELOAD_WD));
+        cout << "WD STATUS: " << m->ToString() << endl << flush;
+
+        rt_task_wait_period(NULL);
+
+        rt_mutex_acquire(&mutex_robotStarted, TM_INFINITE);
+        rs = robotStarted;
+        rt_mutex_release(&mutex_robotStarted);
     }
 }
 
