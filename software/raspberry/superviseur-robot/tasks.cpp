@@ -26,6 +26,7 @@
 #define PRIORITY_TRECEIVEFROMMON 25
 #define PRIORITY_TSTARTROBOT 20
 #define PRIORITY_TCAMERA 21
+#define PRIORITY_TBATTERY 30
 
 #define PERIOD_100MS 1000 * 1000 * 100
 #define PERIOD_10MS 1000 * 1000 * 10
@@ -134,6 +135,10 @@ void Tasks::Init() {
         cerr << "Error task create: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
     }
+    if (err = rt_task_create(&th_battery, "th_battery", 0, PRIORITY_TBATTERY, 0)){
+        cerr << "Error task create: " << strerror(-err) << endl << flush;
+        exit(EXIT_FAILURE);
+    }
     cout << "Tasks created successfully" << endl << flush;
 
     /**************************************************************************************/
@@ -179,6 +184,10 @@ void Tasks::Run() {
         exit(EXIT_FAILURE);
     }
     if (err = rt_task_start(&th_camera, (void(*)(void*)) & Tasks::CameraTask, this)) {
+        cerr << "Error task start: " << strerror(-err) << endl << flush;
+        exit(EXIT_FAILURE);
+    }
+    if (err = rt_task_start(&th_battery, (void(*)(void*)) & Tasks::BatteryLevelTask, this)) {
         cerr << "Error task start: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
     }
@@ -276,6 +285,29 @@ void Tasks::ReceiveFromMonTask(void *arg) {
 
         if (msgRcv->CompareID(MESSAGE_MONITOR_LOST)) {
             delete(msgRcv);
+            cout << "Connection to Monitor lost, stopping robot and returning to initial state" << endl << flush;
+
+            // tell move robot thread to send a stop message to the robot
+            rt_mutex_acquire(&mutex_move, TM_INFINITE);
+            move = MESSAGE_ROBOT_STOP;
+            rt_mutex_release(&mutex_move);
+            rt_mutex_acquire(&mutex_new_move, TM_INFINITE);
+            new_move = true;
+            rt_mutex_release(&mutex_new_move);
+
+            // wait until it has been sent
+            while(1)
+            {
+                rt_mutex_acquire(&mutex_new_move, TM_INFINITE);
+                if(!new_move)
+                    break;
+                rt_mutex_release(&mutex_new_move);
+                rt_task_sleep(10000000); // sleep 10ms
+            }
+            // TODO later...
+            // stop communication with robot
+            // close server
+            // stop camera
             exit(-1);
         } else if (msgRcv->CompareID(MESSAGE_ROBOT_COM_OPEN)) {
             rt_sem_v(&sem_openComRobot);
@@ -393,6 +425,11 @@ void Tasks::MoveTask(void *arg) {
             rt_mutex_acquire(&mutex_robot, TM_INFINITE);
             robot.Write(new Message((MessageID)cpMove));
             rt_mutex_release(&mutex_robot);
+
+            // reset new move since move has been sent to robot
+            rt_mutex_acquire(&mutex_new_move, TM_INFINITE);
+            new_move = false;
+            rt_mutex_release(&mutex_new_move);
         }
         cout << endl << flush;
     }
@@ -450,6 +487,43 @@ void Tasks::CameraTask(void *arg) {
     }
 }
 
+
+/**
+ * @brief Thread checking the battery level of the robot.
+ */
+void Tasks::BatteryLevelTask(void *arg) {
+    int rs;
+    
+    cout << "Start " << __PRETTY_FUNCTION__ << endl << flush;
+    // Synchronization barrier (waiting that all tasks are starting)
+    rt_sem_p(&sem_barrier, TM_INFINITE);
+    
+    /**************************************************************************************/
+    /* The task BatteryLevelTask starts here                                                  */
+    /**************************************************************************************/
+    rt_task_set_periodic(NULL, TM_NOW, 500000000);
+    
+    while (1){
+        rt_task_wait_period(NULL);
+        cout << "Periodic battery update" << endl << flush;
+        rt_mutex_acquire(&mutex_robotStarted, TM_INFINITE);
+        rs = robotStarted;
+        rt_mutex_release(&mutex_robotStarted);
+        if (rs == 1) {
+            rt_mutex_acquire(&mutex_robot, TM_INFINITE);
+            Message * m = robot.Write(robot.GetBattery());
+            rt_mutex_release(&mutex_robot);
+
+            if ((*m).CompareID(MESSAGE_ROBOT_BATTERY_LEVEL)){
+                WriteInQueue(&q_messageToMon,m);
+            }
+            else{
+                cout << "Error" << m->ToString() << endl << flush;
+
+            }
+        }
+    }
+}
 
 /**
  * Write a message in a given queue

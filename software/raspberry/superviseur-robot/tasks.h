@@ -68,6 +68,7 @@ private:
     int move = MESSAGE_ROBOT_STOP;
     bool camera_active;
     bool activate_camera;
+    bool new_move;
     
     /**********************************************************************/
     /* Tasks                                                              */
@@ -79,6 +80,7 @@ private:
     RT_TASK th_startRobot;
     RT_TASK th_move;
     RT_TASK th_camera;
+    RT_TASK th_battery;
     
     /**********************************************************************/
     /* Mutex                                                              */
@@ -88,6 +90,7 @@ private:
     RT_MUTEX mutex_robotStarted;
     RT_MUTEX mutex_move;
     RT_MUTEX mutex_activate_camera;
+    RT_MUTEX mutex_new_move;
 
     /**********************************************************************/
     /* Semaphores                                                         */
@@ -140,6 +143,11 @@ private:
      * @brief Thread handling opening and closing of camer aconnection and sending of images
      */
     void CameraTask(void *arg);
+    
+    /**
+     * @brief Thread checking battery level.
+     */
+    void BatteryLevelTask(void *arg);
     
     /**********************************************************************/
     /* Queue services                                                     */
