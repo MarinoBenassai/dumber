@@ -104,10 +104,6 @@ void Tasks::Init() {
         cerr << "Error semaphore create: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
     }
-    if (err = rt_sem_create(&sem_wd_active, NULL, 0, S_FIFO)) {
-        cerr << "Error semaphore create: " << strerror(-err) << endl << flush;
-        exit(EXIT_FAILURE);
-    }
     cout << "Semaphores created successfully" << endl << flush;
 
     /**************************************************************************************/
@@ -413,6 +409,7 @@ void Tasks::StartRobotTask(void *arg) {
             rt_mutex_acquire(&mutex_robot, TM_INFINITE);
             msgSend = robot.Write(robot.StartWithWD());
             rt_mutex_release(&mutex_robot);
+            CheckRobotMessage(msgSend);
             cout << msgSend->GetID();
             cout << ")" << endl;
 
@@ -436,6 +433,7 @@ void Tasks::StartRobotTask(void *arg) {
             rt_mutex_acquire(&mutex_robot, TM_INFINITE);
             msgSend = robot.Write(robot.StartWithoutWD());
             rt_mutex_release(&mutex_robot);
+            CheckRobotMessage(msgSend);
             cout << msgSend->GetID();
             cout << ")" << endl;
 
@@ -457,6 +455,7 @@ void Tasks::StartRobotTask(void *arg) {
 void Tasks::MoveTask(void *arg) {
     int rs;
     int cpMove;
+    Message * msgSend;
     
     cout << "Start " << __PRETTY_FUNCTION__ << endl << flush;
     // Synchronization barrier (waiting that all tasks are starting)
@@ -481,8 +480,9 @@ void Tasks::MoveTask(void *arg) {
             cout << " move: " << cpMove;
             
             rt_mutex_acquire(&mutex_robot, TM_INFINITE);
-            robot.Write(new Message((MessageID)cpMove));
+            msgSend = robot.Write(new Message((MessageID)cpMove));
             rt_mutex_release(&mutex_robot);
+            CheckRobotMessage(msgSend);
 
             // reset new move since move has been sent to robot
             rt_mutex_acquire(&mutex_new_move, TM_INFINITE);
@@ -578,6 +578,8 @@ void Tasks::BatteryLevelTask(void *arg) {
             rt_mutex_acquire(&mutex_robot, TM_INFINITE);
             Message * m = robot.Write(robot.GetBattery());
             rt_mutex_release(&mutex_robot);
+            CheckRobotMessage(m);
+            
 
             if ((*m).CompareID(MESSAGE_ROBOT_BATTERY_LEVEL)){
                 WriteInQueue(&q_messageToMon,m);
@@ -592,7 +594,7 @@ void Tasks::BatteryLevelTask(void *arg) {
 
 void Tasks::WatchdogUpdateTask(void *arg) {
     int rs;
-
+    Message *m;
     cout << "Start " << __PRETTY_FUNCTION__ << endl << flush;
 
     /**************************************************************************************/
@@ -606,8 +608,9 @@ void Tasks::WatchdogUpdateTask(void *arg) {
     while (1){
         rt_task_wait_period(NULL);
         rt_mutex_acquire(&mutex_robot, TM_INFINITE);
-        robot.Write(robot.ReloadWD());
+        m = robot.Write(robot.ReloadWD());
         rt_mutex_release(&mutex_robot);
+        CheckRobotMessage(m);
         cout << "WD MESSAGE SENT " << endl << flush;
     }
     
@@ -645,3 +648,20 @@ Message *Tasks::ReadInQueue(RT_QUEUE *queue) {
     return msg;
 }
 
+void Tasks::CheckRobotMessage(Message* msg) {
+    int crs;
+    
+    if(msg->CompareID(MESSAGE_ANSWER_COM_ERROR)){
+        rt_mutex_acquire(&mutex_com_robot_status, TM_INFINITE);
+        com_robot_status += 1;
+        crs = com_robot_status;
+        rt_mutex_release(&mutex_com_robot_status);
+    }
+    else {
+        rt_mutex_acquire(&mutex_com_robot_status, TM_INFINITE);
+        com_robot_status = 0;
+        crs = com_robot_status;
+        rt_mutex_release(&mutex_com_robot_status);
+    }
+    cout << "Message checked, crs= " << crs << endl << flush;
+}

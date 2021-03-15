@@ -70,6 +70,7 @@ private:
     bool activate_camera = false;
     bool new_move;
     bool watchdog = false;
+    int com_robot_status = 0;
     
     /**********************************************************************/
     /* Tasks                                                              */
@@ -94,6 +95,8 @@ private:
     RT_MUTEX mutex_activate_camera;
     RT_MUTEX mutex_new_move;
     RT_MUTEX mutex_watchdog;
+    RT_MUTEX mutex_com_robot_status;
+    
     /**********************************************************************/
     /* Semaphores                                                         */
     /**********************************************************************/
@@ -101,7 +104,6 @@ private:
     RT_SEM sem_openComRobot;
     RT_SEM sem_serverOk;
     RT_SEM sem_startRobot;
-    RT_SEM sem_wd_active;
 
     /**********************************************************************/
     /* Message queues                                                     */
@@ -143,7 +145,7 @@ private:
     void MoveTask(void *arg);
     
      /**
-     * @brief Thread handling opening and closing of camer aconnection and sending of images
+     * @brief Thread handling opening and closing of camera pconnection and sending of images
      */
     void CameraTask(void *arg);
     
@@ -157,6 +159,15 @@ private:
      * @brief Thread for updating the watchdog of the robot.
      */
     void WatchdogUpdateTask(void *arg);
+    
+    /**
+     * Checks if the response message from the robot is not valid to detect
+     * communication loss
+     * @param msg
+     * @return 
+     */
+    
+    void CheckRobotMessage(Message* msg);
     
     /**********************************************************************/
     /* Queue services                                                     */
