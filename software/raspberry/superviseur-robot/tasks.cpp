@@ -27,7 +27,7 @@
 #define PRIORITY_TSTARTROBOT 20
 #define PRIORITY_TCAMERA 21
 #define PRIORITY_TBATTERY 30
-#define PRIORITY_TWATCHDOG 1
+#define PRIORITY_TWATCHDOG 31
 
 #define PERIOD_1000MS 1000 * 1000 * 1000
 #define PERIOD_100MS 1000 * 1000 * 100
@@ -201,10 +201,7 @@ void Tasks::Run() {
         cerr << "Error task start: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
     }
-    if (err = rt_task_start(&th_watchdog, (void(*)(void*)) & Tasks::WatchdogUpdateTask, this)) {
-        cerr << "Error task start: " << strerror(-err) << endl << flush;
-        exit(EXIT_FAILURE);
-    }
+
 
     cout << "Tasks launched" << endl << flush;
 }
@@ -428,7 +425,11 @@ void Tasks::StartRobotTask(void *arg) {
                 rt_mutex_release(&mutex_robotStarted);
                 
             }
-            rt_sem_broadcast(&sem_wd_active);
+            int err;
+            if (err = rt_task_start(&th_watchdog, (void(*)(void*)) & Tasks::WatchdogUpdateTask, this)) {
+                cerr << "Error task start: " << strerror(-err) << endl << flush;
+                exit(EXIT_FAILURE);
+            }
         }
         else{
             cout << "Start robot without watchdog (";
@@ -593,38 +594,23 @@ void Tasks::WatchdogUpdateTask(void *arg) {
     int rs;
 
     cout << "Start " << __PRETTY_FUNCTION__ << endl << flush;
-    // Synchronization barrier (waiting that all tasks are starting)
-    rt_sem_p(&sem_barrier, TM_INFINITE);
 
     /**************************************************************************************/
-    /* The task BatteryLevelTask starts here                                                  */
+    /* The task WatchdogUpdateTask starts here                                                  */
     /**************************************************************************************/
     
     rt_task_set_periodic(NULL, TM_NOW, PERIOD_1000MS);
-    while (1) {
-        cout << "Wait for Watchdog semaphore " << endl << flush;
-        rt_sem_p(&sem_wd_active, TM_INFINITE);
-
-        cout << "Watchdog semaphore received" << endl << flush;
+    cout << "Status of robot started" << endl << flush;
 
 
-        rt_mutex_acquire(&mutex_robotStarted, TM_INFINITE);
-        rs = robotStarted;
-        rt_mutex_release(&mutex_robotStarted);
-        cout << "Status of robot started" << rs << endl << flush;
-
-
-        while (rs){
-            Message * m = robot.Write(new Message(MESSAGE_ROBOT_RELOAD_WD));
-            cout << "WD STATUS: " << m->ToString() << endl << flush;
-
-            rt_task_wait_period(NULL);
-
-            rt_mutex_acquire(&mutex_robotStarted, TM_INFINITE);
-            rs = robotStarted;
-            rt_mutex_release(&mutex_robotStarted);
-        }
+    while (1){
+        rt_task_wait_period(NULL);
+        rt_mutex_acquire(&mutex_robot, TM_INFINITE);
+        robot.Write(robot.ReloadWD());
+        rt_mutex_release(&mutex_robot);
+        cout << "WD MESSAGE SENT " << endl << flush;
     }
+    
 }
 
 /**
