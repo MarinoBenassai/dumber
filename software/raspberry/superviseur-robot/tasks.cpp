@@ -31,6 +31,7 @@
 
 #define PERIOD_1000MS 1000 * 1000 * 1000
 #define PERIOD_100MS 1000 * 1000 * 100
+#define PERIOD_500MS 1000 * 1000 * 500
 #define PERIOD_10MS 1000 * 1000 * 10
 
 /*
@@ -566,7 +567,7 @@ void Tasks::BatteryLevelTask(void *arg) {
     /**************************************************************************************/
     /* The task BatteryLevelTask starts here                                                  */
     /**************************************************************************************/
-    rt_task_set_periodic(NULL, TM_NOW, 500000000);
+    rt_task_set_periodic(NULL, TM_NOW, PERIOD_500MS);
     
     while (1){
         rt_task_wait_period(NULL);
@@ -650,8 +651,8 @@ Message *Tasks::ReadInQueue(RT_QUEUE *queue) {
 
 void Tasks::CheckRobotMessage(Message* msg) {
     int crs;
-    
-    if(msg->CompareID(MESSAGE_ANSWER_COM_ERROR)){
+
+    if(msg->CompareID(MESSAGE_ANSWER_ROBOT_TIMEOUT)){
         rt_mutex_acquire(&mutex_com_robot_status, TM_INFINITE);
         com_robot_status += 1;
         crs = com_robot_status;
