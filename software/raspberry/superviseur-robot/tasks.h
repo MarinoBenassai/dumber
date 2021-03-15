@@ -164,10 +164,14 @@ private:
      * Checks if the response message from the robot is not valid to detect
      * communication loss
      * @param msg
+     */
+    void CheckRobotMessage(Message* msg);
+    
+    /**
+     * Stop communication with robot and reset state of robot communication
      * @return 
      */
-    
-    void CheckRobotMessage(Message* msg);
+    void StopRobotCommunication();
     
     /**********************************************************************/
     /* Queue services                                                     */
