@@ -198,11 +198,6 @@ void Tasks::Run() {
         cerr << "Error task start: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
     }
-    if (err = rt_task_start(&th_watchdog, (void(*)(void*)) & Tasks::WatchdogUpdateTask, this)) {
-        cerr << "Error task start: " << strerror(-err) << endl << flush;
-        exit(EXIT_FAILURE);
-    }
-    rt_task_suspend(&th_watchdog);
 
 
     cout << "Tasks launched" << endl << flush;
@@ -428,7 +423,11 @@ void Tasks::StartRobotTask(void *arg) {
                 rt_mutex_release(&mutex_robotStarted);
                 
             }
-            rt_task_resume(&th_watchdog);
+            int err;
+            if (err = rt_task_start(&th_watchdog, (void(*)(void*)) & Tasks::WatchdogUpdateTask, this)) {
+                cerr << "Error task start: " << strerror(-err) << endl << flush;
+                exit(EXIT_FAILURE);
+            }
         }
         else{
             cout << "Start robot without watchdog (";
@@ -679,17 +678,19 @@ void Tasks::StopRobotCommunication(){
     wd = watchdog;
     rt_mutex_release(&mutex_watchdog);
     if(wd) {
-        rt_task_suspend(&th_watchdog);
+        rt_mutex_acquire(&mutex_robot, TM_INFINITE);
+        rt_task_delete(&th_watchdog);
+        rt_mutex_release(&mutex_robot);
     }
     
     rt_mutex_acquire(&mutex_robotStarted, TM_INFINITE);
     robotStarted = 0;
     rt_mutex_release(&mutex_robotStarted);
-    rt_mutex_acquire(&mutex_robot, TM_INFINITE);
+    /*rt_mutex_acquire(&mutex_robot, TM_INFINITE);
     robot.Close();
-    rt_mutex_release(&mutex_robot);
+    rt_mutex_release(&mutex_robot);*/
 
     Message *msgSend;
-    msgSend = new Message(MESSAGE_MONITOR_LOST);
+    msgSend = new Message(MESSAGE_ANSWER_ROBOT_ERROR);
     WriteInQueue(&q_messageToMon, msgSend);
 }
