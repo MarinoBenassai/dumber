@@ -695,6 +695,6 @@ void Tasks::StopRobotCommunication(){
     rt_mutex_release(&mutex_robotStarted);
 
     Message *msgSend;
-    msgSend = new Message(MESSAGE_ANSWER_ROBOT_ERROR);
+    msgSend = new Message(MESSAGE_ANSWER_COM_ERROR);
     WriteInQueue(&q_messageToMon, msgSend);
 }
