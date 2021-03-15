@@ -105,6 +105,10 @@ void Tasks::Init() {
         cerr << "Error semaphore create: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
     }
+    if (err = rt_sem_create(&sem_wd_active, NULL, 0, S_FIFO)) {
+        cerr << "Error semaphore create: " << strerror(-err) << endl << flush;
+        exit(EXIT_FAILURE);
+    }
     cout << "Semaphores created successfully" << endl << flush;
 
     /**************************************************************************************/
@@ -195,6 +199,10 @@ void Tasks::Run() {
         exit(EXIT_FAILURE);
     }
     if (err = rt_task_start(&th_battery, (void(*)(void*)) & Tasks::BatteryLevelTask, this)) {
+        cerr << "Error task start: " << strerror(-err) << endl << flush;
+        exit(EXIT_FAILURE);
+    }
+    if (err = rt_task_start(&th_watchdog, (void(*)(void*)) & Tasks::WatchdogUpdateTask, this)) {
         cerr << "Error task start: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
     }
@@ -423,11 +431,7 @@ void Tasks::StartRobotTask(void *arg) {
                 rt_mutex_release(&mutex_robotStarted);
                 
             }
-            int err;
-            if (err = rt_task_start(&th_watchdog, (void(*)(void*)) & Tasks::WatchdogUpdateTask, this)) {
-                cerr << "Error task start: " << strerror(-err) << endl << flush;
-                exit(EXIT_FAILURE);
-            }
+            rt_sem_v(&sem_wd_active);
         }
         else{
             cout << "Start robot without watchdog (";
@@ -608,11 +612,13 @@ void Tasks::WatchdogUpdateTask(void *arg) {
 
     while (1){
         rt_task_wait_period(NULL);
+        rt_sem_p(&sem_wd_active, TM_INFINITE);
         rt_mutex_acquire(&mutex_robot, TM_INFINITE);
         m = robot.Write(robot.ReloadWD());
         rt_mutex_release(&mutex_robot);
         CheckRobotMessage(m);
         cout << "WD MESSAGE SENT " << endl << flush;
+        rt_sem_v(&sem_wd_active);
     }
     
 }
@@ -659,14 +665,16 @@ void Tasks::CheckRobotMessage(Message* msg) {
         rt_mutex_release(&mutex_com_robot_status);
     }
     else {
-        rt_mutex_acquire(&mutex_com_robot_status, TM_INFINITE);
         com_robot_status = 0;
         crs = com_robot_status;
         rt_mutex_release(&mutex_com_robot_status);
     }
     cout << "Message checked, crs= " << crs << endl << flush;
-    if (crs >= 3) {
+    if (crs == 3) {
         StopRobotCommunication();
+        rt_mutex_acquire(&mutex_com_robot_status, TM_INFINITE);
+        com_robot_status = 0;
+        rt_mutex_release(&mutex_com_robot_status);
     }
 }
 
@@ -674,21 +682,17 @@ void Tasks::StopRobotCommunication(){
     bool wd;
     int rs;
     
+    // stop the watchdog if it was active by stealing its semaphore
     rt_mutex_acquire(&mutex_watchdog, TM_INFINITE);
     wd = watchdog;
     rt_mutex_release(&mutex_watchdog);
     if(wd) {
-        rt_mutex_acquire(&mutex_robot, TM_INFINITE);
-        rt_task_delete(&th_watchdog);
-        rt_mutex_release(&mutex_robot);
+        rt_sem_p(&sem_wd_active, TM_INFINITE);
     }
     
     rt_mutex_acquire(&mutex_robotStarted, TM_INFINITE);
     robotStarted = 0;
     rt_mutex_release(&mutex_robotStarted);
-    /*rt_mutex_acquire(&mutex_robot, TM_INFINITE);
-    robot.Close();
-    rt_mutex_release(&mutex_robot);*/
 
     Message *msgSend;
     msgSend = new Message(MESSAGE_ANSWER_ROBOT_ERROR);
