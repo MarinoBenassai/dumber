@@ -555,9 +555,11 @@ void Tasks::MoveTask(void *arg) {
 void Tasks::CameraTask(void *arg) {
     int ac, status;
     Message *msgSend;
+    MessagePosition *msgPos;
     MessageImg *msgImg;
     Camera cam(sm, 10);
     Img *i;
+    bool aconf,sa,pr;
     cout << "Start " << __PRETTY_FUNCTION__ << endl << flush;
     // Synchronization barrier (waiting that all tasks are starting)
     rt_sem_p(&sem_barrier, TM_INFINITE);
@@ -602,13 +604,15 @@ void Tasks::CameraTask(void *arg) {
 
         // check if camera is active -> send image
         if (camera_active) {
+            cout << "New image" << endl << flush;
             i = new Img(cam.Grab());
+            // reqest for arena
             rt_mutex_acquire(&mutex_search_arena, TM_INFINITE);
-            bool sa = search_arena;
+            sa = search_arena;
             rt_mutex_release(&mutex_search_arena);
             if (sa) {
-                Arena a  = i->SearchArena();
-                i->DrawArena(a);
+                arena  = i->SearchArena();
+                i->DrawArena(arena);
                 msgImg = new MessageImg();
                 msgImg->SetImage(i);
                 msgImg->SetID(MESSAGE_CAM_IMAGE);
@@ -616,14 +620,32 @@ void Tasks::CameraTask(void *arg) {
                 rt_sem_p(&sem_arena_confirmation, TM_INFINITE);
             }
             rt_mutex_acquire(&mutex_arena_confirmed, TM_INFINITE);
-            bool ac = arena_confirmed;
+            aconf = arena_confirmed;
             rt_mutex_release(&mutex_arena_confirmed);
-            
-            if (ac) {
-                Arena a  = i->SearchArena();
-                i->DrawArena(a);
+            if (aconf) {
+                i->DrawArena(arena);
             }
-            
+            rt_mutex_acquire(&mutex_position_requested, TM_INFINITE);
+            bool pr = position_requested;
+            rt_mutex_release(&mutex_activate_camera);
+            if (pr && aconf){
+                std::list<Position> positionList = i->SearchRobot(arena);
+                Position position;
+                position.center.x = -1.0;
+                position.center.y = -1.0;
+                position.robotId = 1;
+                for (Position p: positionList){
+                    i->DrawRobot(p);
+                    if (p.robotId == 1){
+                        position = p;
+                    }
+                }
+                
+                msgPos = new MessagePosition();
+                msgPos->SetID(MESSAGE_CAM_POSITION);
+                msgPos->SetPosition(position);
+                WriteInQueue(&q_messageToMon, msgPos);
+            }
             msgImg = new MessageImg();
             msgImg->SetImage(i);
             msgImg->SetID(MESSAGE_CAM_IMAGE);

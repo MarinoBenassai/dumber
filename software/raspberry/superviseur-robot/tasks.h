@@ -74,6 +74,8 @@ private:
     int com_monitor_status = 0;
     bool search_arena = 0;
     bool arena_confirmed = 0;
+    bool position_requested =0;
+    Arena arena;
     
     /**********************************************************************/
     /* Tasks                                                              */
@@ -101,6 +103,7 @@ private:
     RT_MUTEX mutex_com_robot_status;
     RT_MUTEX mutex_search_arena;
     RT_MUTEX mutex_arena_confirmed;
+    RT_MUTEX mutex_position_requested;
     
     
     /**********************************************************************/
