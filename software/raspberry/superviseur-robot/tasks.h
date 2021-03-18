@@ -105,6 +105,7 @@ private:
     RT_SEM sem_serverOk;
     RT_SEM sem_startRobot;
     RT_SEM sem_wd_active;
+    RT_SEM sem_monitor_reset_connection;
 
     /**********************************************************************/
     /* Message queues                                                     */

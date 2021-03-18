@@ -109,6 +109,10 @@ void Tasks::Init() {
         cerr << "Error semaphore create: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
     }
+    if (err = rt_sem_create(&sem_monitor_reset_connection, NULL, 0, S_FIFO)) {
+        cerr << "Error semaphore create: " << strerror(-err) << endl << flush;
+        exit(EXIT_FAILURE);
+    }
     cout << "Semaphores created successfully" << endl << flush;
 
     /**************************************************************************************/
@@ -240,18 +244,24 @@ void Tasks::ServerTask(void *arg) {
     /**************************************************************************************/
     /* The task server starts here                                                        */
     /**************************************************************************************/
-    rt_mutex_acquire(&mutex_monitor, TM_INFINITE);
-    status = monitor.Open(SERVER_PORT);
-    rt_mutex_release(&mutex_monitor);
+    while(1) {
+        rt_mutex_acquire(&mutex_monitor, TM_INFINITE);
+        status = monitor.Open(SERVER_PORT);
+        rt_mutex_release(&mutex_monitor);
 
-    cout << "Open server on port " << (SERVER_PORT) << " (" << status << ")" << endl;
+        cout << "Open server on port " << (SERVER_PORT) << " (" << status << ")" << endl;
 
-    if (status < 0) throw std::runtime_error {
-        "Unable to start server on port " + std::to_string(SERVER_PORT)
-    };
-    monitor.AcceptClient(); // Wait the monitor client
-    cout << "Rock'n'Roll baby, client accepted!" << endl << flush;
-    rt_sem_broadcast(&sem_serverOk);
+        if (status < 0) throw std::runtime_error {
+            "Unable to start server on port " + std::to_string(SERVER_PORT)
+        };
+        monitor.AcceptClient(); // Wait the monitor client
+        cout << "Rock'n'Roll baby, client accepted!" << endl << flush;
+        rt_sem_broadcast(&sem_serverOk);
+        rt_sem_p(&sem_monitor_reset_connection);
+        rt_mutex_acquire(&mutex_monitor, TM_INFINITE);
+        status = monitor.Close();
+        rt_mutex_release(&mutex_monitor);
+    }
 }
 
 /**
@@ -292,71 +302,81 @@ void Tasks::ReceiveFromMonTask(void *arg) {
     /**************************************************************************************/
     /* The task receiveFromMon starts here                                                */
     /**************************************************************************************/
-    rt_sem_p(&sem_serverOk, TM_INFINITE);
-    cout << "Received message from monitor activated" << endl << flush;
+    
+    while(1) {
+        rt_sem_p(&sem_serverOk, TM_INFINITE);
+        cout << "Received message from monitor (re)activated" << endl << flush;
+        while (1) {
+            rt_mutex_acquire(&mutex_monitor, TM_INFINITE);
+            msgRcv = monitor.Read();
+            rt_mutex_release(&mutex_monitor);
+            cout << "Rcv <= " << msgRcv->ToString() << endl << flush;
 
-    while (1) {
-        msgRcv = monitor.Read();
-        cout << "Rcv <= " << msgRcv->ToString() << endl << flush;
+            if (msgRcv->CompareID(MESSAGE_MONITOR_LOST)) {
+                delete(msgRcv);
+                cout << "Connection to Monitor lost, stopping robot and returning to initial state" << endl << flush;
 
-        if (msgRcv->CompareID(MESSAGE_MONITOR_LOST)) {
-            delete(msgRcv);
-            cout << "Connection to Monitor lost, stopping robot and returning to initial state" << endl << flush;
-
-            // tell move robot thread to send a stop message to the robot
-            rt_mutex_acquire(&mutex_move, TM_INFINITE);
-            move = MESSAGE_ROBOT_STOP;
-            rt_mutex_release(&mutex_move);
-            rt_mutex_acquire(&mutex_new_move, TM_INFINITE);
-            new_move = true;
-            rt_mutex_release(&mutex_new_move);
-
-            // wait until it has been sent
-            while(1)
-            {
+                // tell move robot thread to send a stop message to the robot
+                rt_mutex_acquire(&mutex_move, TM_INFINITE);
+                move = MESSAGE_ROBOT_STOP;
+                rt_mutex_release(&mutex_move);
                 rt_mutex_acquire(&mutex_new_move, TM_INFINITE);
-                if(!new_move)
-                    break;
+                new_move = true;
                 rt_mutex_release(&mutex_new_move);
-                rt_task_sleep(10000000); // sleep 10ms
-            }
-            // TODO later...
-            // stop communication with robot
-            // close server
-            // stop camera
-            exit(-1);
-        } else if (msgRcv->CompareID(MESSAGE_ROBOT_COM_OPEN)) {
-            rt_sem_v(&sem_openComRobot);
-        } else if (msgRcv->CompareID(MESSAGE_ROBOT_START_WITHOUT_WD)) {
-            rt_mutex_acquire(&mutex_watchdog, TM_INFINITE);
-            watchdog = false;
-            rt_mutex_release(&mutex_watchdog);
-            rt_sem_v(&sem_startRobot);
-        }else if (msgRcv->CompareID(MESSAGE_ROBOT_START_WITH_WD)) {
-            rt_mutex_acquire(&mutex_watchdog, TM_INFINITE);
-            watchdog = true;
-            rt_mutex_release(&mutex_watchdog);
-            rt_sem_v(&sem_startRobot);
-        } else if (msgRcv->CompareID(MESSAGE_ROBOT_GO_FORWARD) ||
-                msgRcv->CompareID(MESSAGE_ROBOT_GO_BACKWARD) ||
-                msgRcv->CompareID(MESSAGE_ROBOT_GO_LEFT) ||
-                msgRcv->CompareID(MESSAGE_ROBOT_GO_RIGHT) ||
-                msgRcv->CompareID(MESSAGE_ROBOT_STOP)) {
 
-            rt_mutex_acquire(&mutex_move, TM_INFINITE);
-            move = msgRcv->GetID();
-            rt_mutex_release(&mutex_move);
-        } else if (msgRcv->CompareID(MESSAGE_CAM_OPEN)) {
-            rt_mutex_acquire(&mutex_activate_camera, TM_INFINITE);
-            activate_camera = true;
-            rt_mutex_release(&mutex_activate_camera);
-        } else if (msgRcv->CompareID(MESSAGE_CAM_CLOSE)) {
-            rt_mutex_acquire(&mutex_activate_camera, TM_INFINITE);
-            activate_camera = false;
-            rt_mutex_release(&mutex_activate_camera);
-        
+                // wait until it has been sent
+                while(1)
+                {
+                    rt_mutex_acquire(&mutex_new_move, TM_INFINITE);
+                    if(!new_move)
+                        break;
+                    rt_mutex_release(&mutex_new_move);
+                    rt_task_sleep(PERIOD_10MS); // sleep 10ms
+                }
+                cout << "Stopped robot movement" << endl << flush;
+
+                StopRobotCommunication();
+
+                rt_sem_v(&sem_monitor_reset_connection);
+                // close server
+                rt_mutex_acquire(&mutex_activate_camera, TM_INFINITE);
+                activate_camera = 0;
+                rt_mutex_release(&mutex_activate_camera);
+                break;
+            } else if (msgRcv->CompareID(MESSAGE_ROBOT_COM_OPEN)) {
+                rt_sem_v(&sem_openComRobot);
+            } else if (msgRcv->CompareID(MESSAGE_ROBOT_START_WITHOUT_WD)) {
+                rt_mutex_acquire(&mutex_watchdog, TM_INFINITE);
+                watchdog = false;
+                rt_mutex_release(&mutex_watchdog);
+                rt_sem_v(&sem_startRobot);
+            }else if (msgRcv->CompareID(MESSAGE_ROBOT_START_WITH_WD)) {
+                rt_mutex_acquire(&mutex_watchdog, TM_INFINITE);
+                watchdog = true;
+                rt_mutex_release(&mutex_watchdog);
+                rt_sem_v(&sem_startRobot);
+            } else if (msgRcv->CompareID(MESSAGE_ROBOT_GO_FORWARD) ||
+                    msgRcv->CompareID(MESSAGE_ROBOT_GO_BACKWARD) ||
+                    msgRcv->CompareID(MESSAGE_ROBOT_GO_LEFT) ||
+                    msgRcv->CompareID(MESSAGE_ROBOT_GO_RIGHT) ||
+                    msgRcv->CompareID(MESSAGE_ROBOT_STOP)) {
+
+                rt_mutex_acquire(&mutex_move, TM_INFINITE);
+                move = msgRcv->GetID();
+                rt_mutex_release(&mutex_move);
+            } else if (msgRcv->CompareID(MESSAGE_CAM_OPEN)) {
+                rt_mutex_acquire(&mutex_activate_camera, TM_INFINITE);
+                activate_camera = true;
+                rt_mutex_release(&mutex_activate_camera);
+            } else if (msgRcv->CompareID(MESSAGE_CAM_CLOSE)) {
+                rt_mutex_acquire(&mutex_activate_camera, TM_INFINITE);
+                activate_camera = false;
+                rt_mutex_release(&mutex_activate_camera);
+
+            }
+            delete(msgRcv); // mus be deleted manually, no consumer
         }
-        delete(msgRcv); // mus be deleted manually, no consumer
+        cout << "Communication with monitor closed" << endl << flush;
     }
 }
 
@@ -672,9 +692,13 @@ void Tasks::CheckRobotMessage(Message* msg) {
     cout << "Message checked, crs= " << crs << endl << flush;
     if (crs == 3) {
         StopRobotCommunication();
+        Message *msgSend;
+        msgSend = new Message(MESSAGE_ANSWER_COM_ERROR);
+        WriteInQueue(&q_messageToMon, msgSend);
         rt_mutex_acquire(&mutex_com_robot_status, TM_INFINITE);
         com_robot_status = 0;
         rt_mutex_release(&mutex_com_robot_status);
+
     }
 }
 
@@ -693,8 +717,4 @@ void Tasks::StopRobotCommunication(){
     rt_mutex_acquire(&mutex_robotStarted, TM_INFINITE);
     robotStarted = 0;
     rt_mutex_release(&mutex_robotStarted);
-
-    Message *msgSend;
-    msgSend = new Message(MESSAGE_ANSWER_COM_ERROR);
-    WriteInQueue(&q_messageToMon, msgSend);
 }
