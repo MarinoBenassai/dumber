@@ -257,9 +257,9 @@ void Tasks::ServerTask(void *arg) {
         monitor.AcceptClient(); // Wait the monitor client
         cout << "Rock'n'Roll baby, client accepted!" << endl << flush;
         rt_sem_broadcast(&sem_serverOk);
-        rt_sem_p(&sem_monitor_reset_connection);
+        rt_sem_p(&sem_monitor_reset_connection, TM_INFINITE);
         rt_mutex_acquire(&mutex_monitor, TM_INFINITE);
-        status = monitor.Close();
+        monitor.Close();
         rt_mutex_release(&mutex_monitor);
     }
 }
@@ -315,7 +315,10 @@ void Tasks::ReceiveFromMonTask(void *arg) {
             if (msgRcv->CompareID(MESSAGE_MONITOR_LOST)) {
                 delete(msgRcv);
                 cout << "Connection to Monitor lost, stopping robot and returning to initial state" << endl << flush;
-
+                com_monitor_status += 1;
+                if (com_monitor_status >= 3)
+                {
+                cout << "mon_com_status" << com_monitor_status << endl << flush;
                 // tell move robot thread to send a stop message to the robot
                 rt_mutex_acquire(&mutex_move, TM_INFINITE);
                 move = MESSAGE_ROBOT_STOP;
@@ -343,6 +346,7 @@ void Tasks::ReceiveFromMonTask(void *arg) {
                 activate_camera = 0;
                 rt_mutex_release(&mutex_activate_camera);
                 break;
+                }
             } else if (msgRcv->CompareID(MESSAGE_ROBOT_COM_OPEN)) {
                 rt_sem_v(&sem_openComRobot);
             } else if (msgRcv->CompareID(MESSAGE_ROBOT_START_WITHOUT_WD)) {
@@ -375,6 +379,7 @@ void Tasks::ReceiveFromMonTask(void *arg) {
 
             }
             delete(msgRcv); // mus be deleted manually, no consumer
+            com_monitor_status = 0;
         }
         cout << "Communication with monitor closed" << endl << flush;
     }

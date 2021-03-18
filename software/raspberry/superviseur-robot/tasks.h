@@ -71,6 +71,7 @@ private:
     bool new_move;
     bool watchdog = false;
     int com_robot_status = 0;
+    int com_monitor_status = 0;
     
     /**********************************************************************/
     /* Tasks                                                              */
