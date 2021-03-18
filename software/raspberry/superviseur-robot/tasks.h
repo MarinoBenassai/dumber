@@ -72,6 +72,8 @@ private:
     bool watchdog = false;
     int com_robot_status = 0;
     int com_monitor_status = 0;
+    bool search_arena = 0;
+    bool arena_confirmed = 0;
     
     /**********************************************************************/
     /* Tasks                                                              */
@@ -97,6 +99,9 @@ private:
     RT_MUTEX mutex_new_move;
     RT_MUTEX mutex_watchdog;
     RT_MUTEX mutex_com_robot_status;
+    RT_MUTEX mutex_search_arena;
+    RT_MUTEX mutex_arena_confirmed;
+    
     
     /**********************************************************************/
     /* Semaphores                                                         */
@@ -107,6 +112,7 @@ private:
     RT_SEM sem_startRobot;
     RT_SEM sem_wd_active;
     RT_SEM sem_monitor_reset_connection;
+    RT_SEM sem_arena_confirmation;
 
     /**********************************************************************/
     /* Message queues                                                     */

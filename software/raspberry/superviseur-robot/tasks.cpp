@@ -84,6 +84,18 @@ void Tasks::Init() {
         cerr << "Error mutex create: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
     }
+    if (err = rt_mutex_create(&mutex_com_robot_status, NULL)) {
+        cerr << "Error mutex create: " << strerror(-err) << endl << flush;
+        exit(EXIT_FAILURE);
+    }
+    if (err = rt_mutex_create(&mutex_search_arena, NULL)) {
+        cerr << "Error mutex create: " << strerror(-err) << endl << flush;
+        exit(EXIT_FAILURE);
+    }
+    if (err = rt_mutex_create(&mutex_arena_confirmed, NULL)) {
+        cerr << "Error mutex create: " << strerror(-err) << endl << flush;
+        exit(EXIT_FAILURE);
+    }
     cout << "Mutexes created successfully" << endl << flush;
 
     /**************************************************************************************/
@@ -110,6 +122,10 @@ void Tasks::Init() {
         exit(EXIT_FAILURE);
     }
     if (err = rt_sem_create(&sem_monitor_reset_connection, NULL, 0, S_FIFO)) {
+        cerr << "Error semaphore create: " << strerror(-err) << endl << flush;
+        exit(EXIT_FAILURE);
+    }
+    if (err = rt_sem_create(&sem_arena_confirmation, NULL, 0, S_FIFO)) {
         cerr << "Error semaphore create: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
     }
@@ -369,7 +385,26 @@ void Tasks::ReceiveFromMonTask(void *arg) {
                 rt_mutex_acquire(&mutex_activate_camera, TM_INFINITE);
                 activate_camera = false;
                 rt_mutex_release(&mutex_activate_camera);
-
+            } else if (msgRcv->CompareID(MESSAGE_CAM_ASK_ARENA)) {
+                rt_mutex_acquire(&mutex_search_arena, TM_INFINITE);
+                search_arena = true;
+                rt_mutex_release(&mutex_search_arena);
+            } else if (msgRcv->CompareID(MESSAGE_CAM_ARENA_CONFIRM)) {
+                rt_mutex_acquire(&mutex_search_arena, TM_INFINITE);
+                search_arena = false;
+                rt_mutex_release(&mutex_search_arena);
+                rt_mutex_acquire(&mutex_arena_confirmed, TM_INFINITE);
+                arena_confirmed = true;
+                rt_mutex_release(&mutex_arena_confirmed);
+                rt_sem_v(&sem_arena_confirmation);
+            } else if (msgRcv->CompareID(MESSAGE_CAM_ARENA_INFIRM)) {
+                rt_mutex_acquire(&mutex_search_arena, TM_INFINITE);
+                search_arena = false;
+                rt_mutex_release(&mutex_search_arena);
+                rt_mutex_acquire(&mutex_arena_confirmed, TM_INFINITE);
+                arena_confirmed = false;
+                rt_mutex_release(&mutex_arena_confirmed);
+                rt_sem_v(&sem_arena_confirmation);
             }
             delete(msgRcv); // mus be deleted manually, no consumer
             com_monitor_status = 0;
@@ -568,6 +603,27 @@ void Tasks::CameraTask(void *arg) {
         // check if camera is active -> send image
         if (camera_active) {
             i = new Img(cam.Grab());
+            rt_mutex_acquire(&mutex_search_arena, TM_INFINITE);
+            bool sa = search_arena;
+            rt_mutex_release(&mutex_search_arena);
+            if (sa) {
+                Arena a  = i->SearchArena();
+                i->DrawArena(a);
+                msgImg = new MessageImg();
+                msgImg->SetImage(i);
+                msgImg->SetID(MESSAGE_CAM_IMAGE);
+                WriteInQueue(&q_messageToMon, msgImg);
+                rt_sem_p(&sem_arena_confirmation, TM_INFINITE);
+            }
+            rt_mutex_acquire(&mutex_arena_confirmed, TM_INFINITE);
+            bool ac = arena_confirmed;
+            rt_mutex_release(&mutex_arena_confirmed);
+            
+            if (ac) {
+                Arena a  = i->SearchArena();
+                i->DrawArena(a);
+            }
+            
             msgImg = new MessageImg();
             msgImg->SetImage(i);
             msgImg->SetID(MESSAGE_CAM_IMAGE);
