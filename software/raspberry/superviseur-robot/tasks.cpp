@@ -308,35 +308,21 @@ void Tasks::ReceiveFromMonTask(void *arg) {
         rt_sem_p(&sem_serverOk, TM_INFINITE);
         cout << "Received message from monitor (re)activated" << endl << flush;
         while (1) {
-            rt_mutex_acquire(&mutex_monitor, TM_INFINITE);
             msgRcv = monitor.Read();
-            rt_mutex_release(&mutex_monitor);
             cout << "Rcv <= " << msgRcv->ToString() << endl << flush;
 
             if (msgRcv->CompareID(MESSAGE_MONITOR_LOST)) {
                 delete(msgRcv);
                 cout << "Connection to Monitor lost, stopping robot and returning to initial state" << endl << flush;
-                com_monitor_status += 1;
-                if (com_monitor_status >= 3)
-                {
-                cout << "mon_com_status" << com_monitor_status << endl << flush;
                 // tell move robot thread to send a stop message to the robot
-                rt_mutex_acquire(&mutex_move, TM_INFINITE);
-                move = MESSAGE_ROBOT_STOP;
-                rt_mutex_release(&mutex_move);
-                rt_mutex_acquire(&mutex_new_move, TM_INFINITE);
-                new_move = true;
-                rt_mutex_release(&mutex_new_move);
-
-                // wait until it has been sent
-                while(1)
-                {
-                    rt_mutex_acquire(&mutex_new_move, TM_INFINITE);
-                    if(!new_move)
-                        break;
-                    rt_mutex_release(&mutex_new_move);
-                    rt_task_sleep(PERIOD_10MS); // sleep 10ms
+                rt_mutex_acquire(&mutex_robotStarted, TM_INFINITE);
+                if (robotStarted) {
+                    rt_mutex_acquire(&mutex_robot, TM_INFINITE);
+                    robot.Write(robot.Reset());
+                    rt_mutex_release(&mutex_robot);
                 }
+                rt_mutex_release(&mutex_robotStarted);
+
                 cout << "Stopped robot movement" << endl << flush;
 
                 StopRobotCommunication();
@@ -347,7 +333,13 @@ void Tasks::ReceiveFromMonTask(void *arg) {
                 activate_camera = 0;
                 rt_mutex_release(&mutex_activate_camera);
                 break;
-                }
+                
+            } else if(msgRcv->CompareID(MESSAGE_ROBOT_RESET)){
+                StopRobotCommunication();
+                rt_mutex_acquire(&mutex_robot, TM_INFINITE);
+                robot.Write(robot.Reset());
+                rt_mutex_release(&mutex_robot);
+
             } else if (msgRcv->CompareID(MESSAGE_ROBOT_COM_OPEN)) {
                 rt_sem_v(&sem_openComRobot);
             } else if (msgRcv->CompareID(MESSAGE_ROBOT_START_WITHOUT_WD)) {
@@ -455,9 +447,10 @@ void Tasks::StartRobotTask(void *arg) {
                 rt_mutex_acquire(&mutex_robotStarted, TM_INFINITE);
                 robotStarted = 1;
                 rt_mutex_release(&mutex_robotStarted);
+                rt_sem_v(&sem_wd_active);
                 
             }
-            rt_sem_v(&sem_wd_active);
+
         }
         else{
             cout << "Start robot without watchdog (";
@@ -712,11 +705,16 @@ void Tasks::StopRobotCommunication(){
     bool wd;
     int rs;
     
+    
+    rt_mutex_acquire(&mutex_robotStarted, TM_INFINITE);
+    rs = robotStarted;
+    rt_mutex_release(&mutex_robotStarted);
+    
     // stop the watchdog if it was active by stealing its semaphore
     rt_mutex_acquire(&mutex_watchdog, TM_INFINITE);
     wd = watchdog;
     rt_mutex_release(&mutex_watchdog);
-    if(wd) {
+    if(wd && rs) {
         rt_sem_p(&sem_wd_active, TM_INFINITE);
     }
     
