@@ -258,6 +258,7 @@ void Tasks::ServerTask(void *arg) {
         cout << "Rock'n'Roll baby, client accepted!" << endl << flush;
         rt_sem_broadcast(&sem_serverOk);
         rt_sem_p(&sem_monitor_reset_connection, TM_INFINITE);
+        cout << "Resetting server" << endl << flush;
         rt_mutex_acquire(&mutex_monitor, TM_INFINITE);
         monitor.Close();
         rt_mutex_release(&mutex_monitor);
@@ -498,7 +499,7 @@ void Tasks::MoveTask(void *arg) {
 
     while (1) {
         rt_task_wait_period(NULL);
-        cout << "Periodic movement update";
+        //cout << "Periodic movement update";
         rt_mutex_acquire(&mutex_robotStarted, TM_INFINITE);
         rs = robotStarted;
         rt_mutex_release(&mutex_robotStarted);
@@ -519,7 +520,7 @@ void Tasks::MoveTask(void *arg) {
             new_move = false;
             rt_mutex_release(&mutex_new_move);
         }
-        cout << endl << flush;
+        //cout << endl << flush;
     }
 }
 
@@ -600,7 +601,7 @@ void Tasks::BatteryLevelTask(void *arg) {
     
     while (1){
         rt_task_wait_period(NULL);
-        cout << "Periodic battery update" << endl << flush;
+        //cout << "Periodic battery update" << endl << flush;
         rt_mutex_acquire(&mutex_robotStarted, TM_INFINITE);
         rs = robotStarted;
         rt_mutex_release(&mutex_robotStarted);
