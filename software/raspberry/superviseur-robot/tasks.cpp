@@ -614,6 +614,9 @@ void Tasks::CameraTask(void *arg) {
                 msgImg->SetID(MESSAGE_CAM_IMAGE);
                 WriteInQueue(&q_messageToMon, msgImg);
                 rt_sem_p(&sem_arena_confirmation, TM_INFINITE);
+                rt_mutex_acquire(&mutex_search_arena, TM_INFINITE);
+                search_arena = false;
+                rt_mutex_release(&mutex_search_arena);
             }
             rt_mutex_acquire(&mutex_arena_confirmed, TM_INFINITE);
             bool ac = arena_confirmed;
