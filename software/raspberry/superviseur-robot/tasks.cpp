@@ -21,13 +21,13 @@
 // Déclaration des priorités des taches
 #define PRIORITY_TSERVER 30
 #define PRIORITY_TOPENCOMROBOT 20
-#define PRIORITY_TMOVE 20
+#define PRIORITY_TMOVE 40
 #define PRIORITY_TSENDTOMON 22
 #define PRIORITY_TRECEIVEFROMMON 25
 #define PRIORITY_TSTARTROBOT 20
-#define PRIORITY_TCAMERA 21
-#define PRIORITY_TBATTERY 30
-#define PRIORITY_TWATCHDOG 31
+#define PRIORITY_TCAMERA 10
+#define PRIORITY_TBATTERY 35
+#define PRIORITY_TWATCHDOG 50
 
 #define PERIOD_1000MS 1000 * 1000 * 1000
 #define PERIOD_100MS 1000 * 1000 * 100
@@ -405,6 +405,15 @@ void Tasks::ReceiveFromMonTask(void *arg) {
                 arena_confirmed = false;
                 rt_mutex_release(&mutex_arena_confirmed);
                 rt_sem_v(&sem_arena_confirmation);
+            } else if (msgRcv->CompareID(MESSAGE_CAM_POSITION_COMPUTE_START)) {
+                rt_mutex_acquire(&mutex_position_requested, TM_INFINITE);
+                position_requested = true;
+                rt_mutex_release(&mutex_activate_camera);
+                
+            } else if (msgRcv->CompareID(MESSAGE_CAM_POSITION_COMPUTE_STOP)) {
+                rt_mutex_acquire(&mutex_position_requested, TM_INFINITE);
+                position_requested = false;
+                rt_mutex_release(&mutex_activate_camera);
             }
             delete(msgRcv); // mus be deleted manually, no consumer
             com_monitor_status = 0;
@@ -637,13 +646,14 @@ void Tasks::CameraTask(void *arg) {
             rt_mutex_release(&mutex_activate_camera);
             if (pr && aconf){
                 std::list<Position> positionList = i->SearchRobot(arena);
+                cout << "Nombre de robots touvés : " << positionList.size() << endl << flush;
                 Position position;
                 position.center.x = -1.0;
                 position.center.y = -1.0;
                 position.robotId = 9;
                 for (Position p: positionList){
                     i->DrawRobot(p);
-                    if (p.robotId == 1){
+                    if (p.robotId == 9){
                         position = p;
                     }
                 }
