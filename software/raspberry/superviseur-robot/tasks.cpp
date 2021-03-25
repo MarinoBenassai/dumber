@@ -621,8 +621,12 @@ void Tasks::CameraTask(void *arg) {
                 rt_mutex_acquire(&mutex_search_arena, TM_INFINITE);
                 search_arena = false;
                 rt_mutex_release(&mutex_search_arena);
+                continue;
             }
-            rt_mutex_acquire(&mutex_arena_confirmed, TM_INFINITE);
+            msgImg = new MessageImg();
+            msgImg->SetImage(i);
+            msgImg->SetID(MESSAGE_CAM_IMAGE);
+                        rt_mutex_acquire(&mutex_arena_confirmed, TM_INFINITE);
             aconf = arena_confirmed;
             rt_mutex_release(&mutex_arena_confirmed);
             if (aconf) {
@@ -636,7 +640,7 @@ void Tasks::CameraTask(void *arg) {
                 Position position;
                 position.center.x = -1.0;
                 position.center.y = -1.0;
-                position.robotId = 1;
+                position.robotId = 9;
                 for (Position p: positionList){
                     i->DrawRobot(p);
                     if (p.robotId == 1){
@@ -649,10 +653,8 @@ void Tasks::CameraTask(void *arg) {
                 msgPos->SetPosition(position);
                 WriteInQueue(&q_messageToMon, msgPos);
             }
-            msgImg = new MessageImg();
-            msgImg->SetImage(i);
-            msgImg->SetID(MESSAGE_CAM_IMAGE);
             WriteInQueue(&q_messageToMon, msgImg);
+            
         }
     }
 }

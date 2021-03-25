@@ -153,6 +153,9 @@ void ComMonitor::Write(Message *msg) {
     if (!msg->CompareID(MESSAGE_CAM_IMAGE)) {
         delete(msg);
     }
+    else {
+        delete(msg);
+    }
    
     // Call user method after write
     Write_Post();
