@@ -96,6 +96,14 @@ void Tasks::Init() {
         cerr << "Error mutex create: " << strerror(-err) << endl << flush;
         exit(EXIT_FAILURE);
     }
+    if (err = rt_mutex_create(&mutex_watchdog, NULL)) {
+        cerr << "Error mutex create: " << strerror(-err) << endl << flush;
+        exit(EXIT_FAILURE);
+    }
+    if (err = rt_mutex_create(&mutex_position_requested, NULL)) {
+        cerr << "Error mutex create: " << strerror(-err) << endl << flush;
+        exit(EXIT_FAILURE);
+    }
     cout << "Mutexes created successfully" << endl << flush;
 
     /**************************************************************************************/
@@ -408,12 +416,12 @@ void Tasks::ReceiveFromMonTask(void *arg) {
             } else if (msgRcv->CompareID(MESSAGE_CAM_POSITION_COMPUTE_START)) {
                 rt_mutex_acquire(&mutex_position_requested, TM_INFINITE);
                 position_requested = true;
-                rt_mutex_release(&mutex_activate_camera);
+                rt_mutex_release(&mutex_position_requested);
                 
             } else if (msgRcv->CompareID(MESSAGE_CAM_POSITION_COMPUTE_STOP)) {
                 rt_mutex_acquire(&mutex_position_requested, TM_INFINITE);
                 position_requested = false;
-                rt_mutex_release(&mutex_activate_camera);
+                rt_mutex_release(&mutex_position_requested);
             }
             delete(msgRcv); // mus be deleted manually, no consumer
             com_monitor_status = 0;
