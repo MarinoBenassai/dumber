@@ -651,7 +651,7 @@ void Tasks::CameraTask(void *arg) {
             }
             rt_mutex_acquire(&mutex_position_requested, TM_INFINITE);
             bool pr = position_requested;
-            rt_mutex_release(&mutex_activate_camera);
+            rt_mutex_release(&mutex_position_requested);
             if (pr && aconf){
                 std::list<Position> positionList = i->SearchRobot(arena);
                 cout << "Nombre de robots touvés : " << positionList.size() << endl << flush;
